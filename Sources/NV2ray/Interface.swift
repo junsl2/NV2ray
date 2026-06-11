@@ -200,18 +200,7 @@ enum SingBoxConfigBuilder {
         }
 
         return [
-            "profile": [
-                "type": "vless",
-                "server": config.profile.server,
-                "port": config.profile.port,
-                "uuid": config.profile.uuid,
-                "security": config.profile.security.rawValue,
-                "transport": config.profile.transport.rawValue,
-                "server_name": config.profile.serverName,
-                "public_key": config.profile.publicKey,
-                "short_id": config.profile.shortID,
-                "flow": config.profile.flow
-            ],
+            "outbounds": [makeOutbound(config.profile)],
             "dns": [
                 "mode": config.dns.mode.rawValue,
                 "url": config.dns.dohURL,
@@ -225,5 +214,101 @@ enum SingBoxConfigBuilder {
                 "rules": rules
             ]
         ]
+    }
+
+    private static func makeOutbound(_ profile: ProxyProfile) -> [String: Any] {
+        switch profile.protocolType {
+        case .vless:
+            return makeVLESSOutbound(profile)
+        case .hysteria2:
+            return makeHysteria2Outbound(profile)
+        }
+    }
+
+    private static func makeVLESSOutbound(_ profile: ProxyProfile) -> [String: Any] {
+        var outbound: [String: Any] = [
+            "type": "vless",
+            "tag": "proxy",
+            "server": profile.server,
+            "server_port": profile.port,
+            "uuid": profile.uuid
+        ]
+
+        if !profile.flow.isEmpty {
+            outbound["flow"] = profile.flow
+        }
+
+        if profile.transport != .tcp {
+            outbound["transport"] = ["type": profile.transport.configValue]
+        }
+
+        if profile.security != .none {
+            var tls: [String: Any] = [
+                "enabled": true,
+                "server_name": profile.serverName,
+                "insecure": profile.allowInsecure,
+                "utls": ["enabled": true, "fingerprint": profile.fingerprint]
+            ]
+
+            if profile.security == .reality {
+                tls["reality"] = [
+                    "enabled": true,
+                    "public_key": profile.publicKey,
+                    "short_id": profile.shortID
+                ]
+            }
+            outbound["tls"] = tls
+        }
+
+        return outbound
+    }
+
+    private static func makeHysteria2Outbound(_ profile: ProxyProfile) -> [String: Any] {
+        var outbound: [String: Any] = [
+            "type": "hysteria2",
+            "tag": "proxy",
+            "server": profile.server,
+            "password": profile.hysteriaPassword,
+            "tls": [
+                "enabled": true,
+                "server_name": profile.serverName,
+                "insecure": profile.allowInsecure
+            ]
+        ]
+
+        let ports = profile.serverPorts
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if ports.isEmpty {
+            outbound["server_port"] = profile.port
+        } else {
+            outbound["server_ports"] = ports
+        }
+
+        if profile.upMbps > 0 {
+            outbound["up_mbps"] = profile.upMbps
+        }
+        if profile.downMbps > 0 {
+            outbound["down_mbps"] = profile.downMbps
+        }
+        if profile.hysteriaNetwork != .both {
+            outbound["network"] = profile.hysteriaNetwork.rawValue
+        }
+        if !profile.hopInterval.isEmpty {
+            outbound["hop_interval"] = profile.hopInterval
+        }
+        if !profile.hopIntervalMax.isEmpty {
+            outbound["hop_interval_max"] = profile.hopIntervalMax
+        }
+        if profile.obfsType != .none {
+            outbound["obfs"] = [
+                "type": profile.obfsType.rawValue,
+                "password": profile.obfsPassword
+            ]
+        }
+
+        return outbound
     }
 }
