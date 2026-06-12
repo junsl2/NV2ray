@@ -42,7 +42,10 @@ final class AppStore: ObservableObject {
 
         do {
             let config = try generatedConfigString()
-            try await tunnelManager.connect(configContent: config)
+            try await tunnelManager.connect(
+                configContent: config,
+                tunnelSettings: configuration.tunnel
+            )
         } catch {
             lastError = error.localizedDescription
             connectionState = .error
@@ -50,7 +53,14 @@ final class AppStore: ObservableObject {
     }
 
     func disconnect() {
-        tunnelManager.disconnect()
+        Task {
+            do {
+                try await tunnelManager.disconnect()
+            } catch {
+                lastError = error.localizedDescription
+                connectionState = .error
+            }
+        }
     }
 
     func save() {

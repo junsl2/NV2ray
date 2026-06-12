@@ -1,12 +1,24 @@
 # NV2ray
 
-A black Liquid Glass-inspired macOS menu-bar client with VLESS, Hysteria2, custom DNS, rule-based routing, and a sing-box Packet Tunnel integration.
+A black Liquid Glass-inspired macOS menu-bar client with VLESS, Hysteria2, custom DNS, rule-based routing, a kill switch, and a sing-box Packet Tunnel integration.
 
 ## Supported profiles
 
 - VLESS: None, TLS, Reality
 - VLESS transports: TCP, WebSocket, HTTP, XHTTP
 - Hysteria2: TLS, TCP/UDP selection, bandwidth limits, port ranges, port hopping, Salamander or Gecko obfuscation
+
+## Kill switch
+
+The optional kill switch applies protection at both the macOS Network Extension and sing-box layers:
+
+- Enables `includeAllNetworks` and route enforcement on the VPN protocol
+- Enables an On Demand reconnect rule while protection is active
+- Passes `includeAllNetworks` to the sing-box Apple extension
+- Changes the TUN stack from `system` to `gvisor`
+- Keeps local-network bypass disabled unless the user explicitly enables it
+
+An intentional Stop action disables On Demand before stopping the tunnel, so normal network access is restored. Changes made while connected require a reconnect.
 
 ## Architecture
 
