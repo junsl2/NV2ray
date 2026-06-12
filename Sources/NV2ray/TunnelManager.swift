@@ -20,28 +20,64 @@ final class TunnelManager {
         publishStatus()
     }
 
-    func connect(configContent: String) async throws {
+    func connect(configContent: String, tunnelSettings: TunnelSettings) async throws {
         let manager = try await loadOrCreateManager()
-        self.manager = manager
-        observeStatus()
 
         guard manager.connection.status == .disconnected || manager.connection.status == .invalid else {
             return
         }
 
+        try await apply(tunnelSettings, to: manager)
+        self.manager = manager
+        observeStatus()
+
         let options: [String: NSObject] = [
             "configContent": configContent as NSString,
-            "includeAllNetworks": NSNumber(value: false),
+            "includeAllNetworks": NSNumber(value: tunnelSettings.killSwitch),
             "systemProxyEnabled": NSNumber(value: false),
-            "excludeDefaultRoute": NSNumber(value: false)
+            "excludeDefaultRoute": NSNumber(value: false),
+            "autoRouteUseSubRangesByDefault": NSNumber(value: false)
         ]
         try manager.connection.startVPNTunnel(options: options)
         publishStatus()
     }
 
-    func disconnect() {
-        manager?.connection.stopVPNTunnel()
+    func disconnect() async throws {
+        guard let manager else { return }
+
+        // Disable On Demand first so an intentional Stop action does not
+        // immediately reconnect the VPN profile.
+        if manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            manager.onDemandRules = []
+            try await save(manager)
+            try await load(manager)
+        }
+
+        manager.connection.stopVPNTunnel()
         publishStatus()
+    }
+
+    private func apply(_ settings: TunnelSettings, to manager: NETunnelProviderManager) async throws {
+        let tunnelProtocol = (manager.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
+        tunnelProtocol.providerBundleIdentifier = Self.providerBundleIdentifier
+        tunnelProtocol.serverAddress = Self.localizedDescription
+
+        // includeAllNetworks is the system-level fail-closed path. It keeps
+        // traffic scoped to the Packet Tunnel instead of allowing another
+        // interface to become a bypass route while the VPN is active.
+        tunnelProtocol.includeAllNetworks = settings.killSwitch
+        tunnelProtocol.enforceRoutes = settings.killSwitch
+        tunnelProtocol.excludeLocalNetworks = settings.killSwitch && settings.allowLocalNetwork
+
+        manager.protocolConfiguration = tunnelProtocol
+        manager.localizedDescription = Self.localizedDescription
+        manager.isEnabled = true
+        manager.onDemandRules = settings.killSwitch ? [NEOnDemandRuleConnect()] : []
+        manager.isOnDemandEnabled = settings.killSwitch
+
+        try await save(manager)
+        try await load(manager)
     }
 
     private func loadOrCreateManager() async throws -> NETunnelProviderManager {
