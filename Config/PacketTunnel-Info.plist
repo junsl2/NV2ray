@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>BasePackageIdentifier</key>
+    <string>io.github.junsl2.NV2ray</string>
+    <key>AppGroupIdentifier</key>
+    <string>group.io.github.junsl2.NV2ray</string>
     <key>CFBundleDisplayName</key>
     <string>NV2ray Packet Tunnel</string>
     <key>CFBundleName</key>
