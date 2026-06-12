@@ -23,4 +23,4 @@ jobs:
         run: swift package dump-package
 
       - name: Build
-        run: swift build -v
+        run: swift build
