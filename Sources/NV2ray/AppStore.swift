@@ -71,7 +71,7 @@ final class AppStore: ObservableObject {
     }
 
     private func generatedConfigString() throws -> String {
-        let dictionary = try SingBoxConfigBuilder.build(configuration)
+        let dictionary = try RuntimeConfigBuilder.build(configuration)
         let data = try JSONSerialization.data(withJSONObject: dictionary, options: [.prettyPrinted, .sortedKeys])
         return String(decoding: data, as: UTF8.self)
     }
