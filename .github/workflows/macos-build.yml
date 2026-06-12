@@ -23,4 +23,19 @@ jobs:
         run: swift package dump-package
 
       - name: Build
-        run: swift build -v
+        id: swift-build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee swift-build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-build-log
+          path: swift-build.log
+
+      - name: Fail when build failed
+        if: steps.swift-build.outcome == 'failure'
+        run: exit 1

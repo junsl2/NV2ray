@@ -4,3 +4,6 @@
 DerivedData/
 *.xcuserstate
 xcuserdata/
+Vendor/Libbox.xcframework/
+Vendor/Library.framework/
+NV2ray.xcodeproj/
