@@ -111,6 +111,11 @@ struct DNSSettings: Codable, Hashable {
     enum Mode: String, Codable, CaseIterable { case system, doh, dot }
 }
 
+struct TunnelSettings: Codable, Hashable {
+    var killSwitch = false
+    var allowLocalNetwork = false
+}
+
 struct RouteRule: Codable, Identifiable, Hashable {
     var id = UUID()
     var enabled = true
@@ -129,6 +134,7 @@ struct RouteRule: Codable, Identifiable, Hashable {
 struct AppConfiguration: Codable {
     var profile = ProxyProfile()
     var dns = DNSSettings()
+    var tunnel = TunnelSettings()
     var routingMode: RoutingMode = .rule
     var rules: [RouteRule] = [
         RouteRule(name: "Private networks", matcher: .ipCIDR, values: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"], action: .direct),
@@ -137,6 +143,25 @@ struct AppConfiguration: Codable {
     var launchAtLogin = false
 
     enum RoutingMode: String, Codable, CaseIterable { case global, rule, direct }
+
+    private enum CodingKeys: String, CodingKey {
+        case profile, dns, tunnel, routingMode, rules, launchAtLogin
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profile = try container.decodeIfPresent(ProxyProfile.self, forKey: .profile) ?? ProxyProfile()
+        dns = try container.decodeIfPresent(DNSSettings.self, forKey: .dns) ?? DNSSettings()
+        tunnel = try container.decodeIfPresent(TunnelSettings.self, forKey: .tunnel) ?? TunnelSettings()
+        routingMode = try container.decodeIfPresent(RoutingMode.self, forKey: .routingMode) ?? .rule
+        rules = try container.decodeIfPresent([RouteRule].self, forKey: .rules) ?? [
+            RouteRule(name: "Private networks", matcher: .ipCIDR, values: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"], action: .direct),
+            RouteRule(name: "Russian domains", matcher: .ruleSet, values: ["category-ru"], action: .direct)
+        ]
+        launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+    }
 }
 
 enum ConnectionState: String {
