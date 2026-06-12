@@ -1,5 +1,9 @@
-import Foundation
-import NetworkExtension
+@preconcurrency import Foundation
+@preconcurrency import NetworkExtension
+
+private struct TunnelManagerList: @unchecked Sendable {
+    let managers: [NETunnelProviderManager]
+}
 
 @MainActor
 final class TunnelManager {
@@ -9,12 +13,6 @@ final class TunnelManager {
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
     var onStatusChange: ((ConnectionState) -> Void)?
-
-    deinit {
-        if let statusObserver {
-            NotificationCenter.default.removeObserver(statusObserver)
-        }
-    }
 
     func prepare() async throws {
         manager = try await loadOrCreateManager()
@@ -97,12 +95,13 @@ final class TunnelManager {
     }
 
     private func loadManagers() async throws -> [NETunnelProviderManager] {
-        try await withCheckedThrowingContinuation { continuation in
+        let list: TunnelManagerList = try await withCheckedThrowingContinuation { continuation in
             NETunnelProviderManager.loadAllFromPreferences { managers, error in
                 if let error { continuation.resume(throwing: error) }
-                else { continuation.resume(returning: managers ?? []) }
+                else { continuation.resume(returning: TunnelManagerList(managers: managers ?? [])) }
             }
         }
+        return list.managers
     }
 
     private func save(_ manager: NETunnelProviderManager) async throws {
