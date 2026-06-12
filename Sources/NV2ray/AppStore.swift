@@ -8,6 +8,7 @@ final class AppStore: ObservableObject {
     @Published var lastError: String?
 
     private let configURL: URL
+    private let tunnelManager = TunnelManager()
 
     init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -15,6 +16,19 @@ final class AppStore: ObservableObject {
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         configURL = base.appendingPathComponent("configuration.json")
         load()
+
+        tunnelManager.onStatusChange = { [weak self] state in
+            self?.connectionState = state
+        }
+
+        Task {
+            do {
+                try await tunnelManager.prepare()
+            } catch {
+                lastError = error.localizedDescription
+                connectionState = .error
+            }
+        }
     }
 
     func connect() async {
@@ -25,12 +39,18 @@ final class AppStore: ObservableObject {
 
         connectionState = .connecting
         save()
-        try? await Task.sleep(for: .milliseconds(450))
-        connectionState = .connected
+
+        do {
+            let config = try generatedConfigString()
+            try await tunnelManager.connect(configContent: config)
+        } catch {
+            lastError = error.localizedDescription
+            connectionState = .error
+        }
     }
 
     func disconnect() {
-        connectionState = .disconnected
+        tunnelManager.disconnect()
     }
 
     func save() {
@@ -44,12 +64,16 @@ final class AppStore: ObservableObject {
 
     func exportGeneratedConfig() -> String {
         do {
-            let dictionary = try SingBoxConfigBuilder.build(configuration)
-            let data = try JSONSerialization.data(withJSONObject: dictionary, options: [.prettyPrinted, .sortedKeys])
-            return String(decoding: data, as: UTF8.self)
+            return try generatedConfigString()
         } catch {
             return "{\"error\":\"\(error.localizedDescription)\"}"
         }
+    }
+
+    private func generatedConfigString() throws -> String {
+        let dictionary = try SingBoxConfigBuilder.build(configuration)
+        let data = try JSONSerialization.data(withJSONObject: dictionary, options: [.prettyPrinted, .sortedKeys])
+        return String(decoding: data, as: UTF8.self)
     }
 
     private func validateProfile() -> Bool {
