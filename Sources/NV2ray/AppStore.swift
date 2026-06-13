@@ -32,7 +32,10 @@ final class AppStore: ObservableObject {
     }
 
     func connect() async {
-        guard validateProfile() else {
+        do {
+            try ConfigurationValidator.validate(configuration)
+        } catch {
+            lastError = error.localizedDescription
             connectionState = .error
             return
         }
@@ -81,37 +84,10 @@ final class AppStore: ObservableObject {
     }
 
     private func generatedConfigString() throws -> String {
+        try ConfigurationValidator.validate(configuration)
         let dictionary = try RuntimeConfigBuilder.build(configuration)
         let data = try JSONSerialization.data(withJSONObject: dictionary, options: [.prettyPrinted, .sortedKeys])
         return String(decoding: data, as: UTF8.self)
-    }
-
-    private func validateProfile() -> Bool {
-        let profile = configuration.profile
-        guard !profile.server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            lastError = "Server is required."
-            return false
-        }
-        guard (1...65535).contains(profile.port) else {
-            lastError = "Port must be between 1 and 65535."
-            return false
-        }
-
-        switch profile.protocolType {
-        case .vless:
-            guard !profile.uuid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                lastError = "VLESS UUID is required."
-                return false
-            }
-        case .hysteria2:
-            guard !profile.hysteriaPassword.isEmpty else {
-                lastError = "Hysteria2 password is required."
-                return false
-            }
-        }
-
-        lastError = nil
-        return true
     }
 
     private func load() {
