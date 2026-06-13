@@ -2,9 +2,16 @@ import Foundation
 
 enum RuntimeConfigBuilder {
     static func build(_ config: AppConfiguration) throws -> [String: Any] {
+        try ConfigurationValidator.validate(config)
+
         let proxy = makeProxy(config.profile)
-        let dns = makeDNS(config.dns)
+        let dns = makeDNS(config.dns, killSwitch: config.tunnel.killSwitch)
         let route = makeRoute(config)
+        var outbounds: [[String: Any]] = [proxy, ["type": "block", "tag": "block"]]
+
+        if !config.tunnel.killSwitch || config.tunnel.allowLocalNetwork {
+            outbounds.append(["type": "direct", "tag": "direct"])
+        }
 
         return [
             "log": ["level": "info", "timestamp": true],
@@ -17,10 +24,7 @@ enum RuntimeConfigBuilder {
                 "strict_route": true,
                 "stack": config.tunnel.killSwitch ? "gvisor" : "system"
             ]],
-            "outbounds": [
-                proxy,
-                ["type": "direct", "tag": "direct"]
-            ],
+            "outbounds": outbounds,
             "route": route
         ]
     }
@@ -86,7 +90,8 @@ enum RuntimeConfigBuilder {
         }
     }
 
-    private static func makeDNS(_ settings: DNSSettings) -> [String: Any] {
+    private static func makeDNS(_ settings: DNSSettings, killSwitch: Bool) -> [String: Any] {
+        let protectedDetour = killSwitch ? "proxy" : (settings.routeThroughProxy ? "proxy" : "direct")
         switch settings.mode {
         case .system:
             return ["servers": [["type": "local", "tag": "local"]], "final": "local"]
@@ -96,7 +101,7 @@ enum RuntimeConfigBuilder {
                     "type": "tls",
                     "tag": "secure",
                     "server": settings.bootstrap,
-                    "detour": settings.routeThroughProxy ? "proxy" : "direct"
+                    "detour": protectedDetour
                 ]],
                 "final": "secure"
             ]
@@ -113,9 +118,14 @@ enum RuntimeConfigBuilder {
                         "server_port": url?.port ?? 443,
                         "path": path,
                         "domain_resolver": "bootstrap",
-                        "detour": settings.routeThroughProxy ? "proxy" : "direct"
+                        "detour": protectedDetour
                     ],
-                    ["type": "udp", "tag": "bootstrap", "server": settings.bootstrap]
+                    [
+                        "type": "udp",
+                        "tag": "bootstrap",
+                        "server": settings.bootstrap,
+                        "detour": protectedDetour
+                    ]
                 ],
                 "final": "secure"
             ]
@@ -125,8 +135,9 @@ enum RuntimeConfigBuilder {
     private static func makeRoute(_ config: AppConfiguration) -> [String: Any] {
         var rules: [[String: Any]] = []
         for rule in config.rules where rule.enabled {
-            var item: [String: Any] = ["action": rule.action == .block ? "reject" : "route"]
-            if rule.action != .block { item["outbound"] = rule.action.rawValue }
+            let effectiveAction = effectiveAction(for: rule, config: config)
+            var item: [String: Any] = ["action": effectiveAction == .block ? "reject" : "route"]
+            if effectiveAction != .block { item["outbound"] = effectiveAction.rawValue }
             switch rule.matcher {
             case .domain: item["domain"] = rule.values
             case .domainSuffix: item["domain_suffix"] = rule.values
@@ -141,18 +152,43 @@ enum RuntimeConfigBuilder {
             rules.append(item)
         }
 
+        let final = config.tunnel.killSwitch ? "proxy" : (config.routingMode == .direct ? "direct" : "proxy")
+        let ruleSetDetour = config.tunnel.killSwitch ? "proxy" : "direct"
+
         return [
             "auto_detect_interface": true,
             "rules": rules,
-            "final": config.routingMode == .direct ? "direct" : "proxy",
+            "final": final,
             "rule_set": [[
                 "type": "remote",
                 "tag": "category-ru",
                 "format": "binary",
                 "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ru.srs",
-                "download_detour": "direct",
+                "download_detour": ruleSetDetour,
                 "update_interval": "24h"
             ]]
         ]
+    }
+
+    private static func effectiveAction(for rule: RouteRule, config: AppConfiguration) -> RouteRule.Action {
+        guard config.tunnel.killSwitch, rule.action == .direct else {
+            return rule.action
+        }
+        if config.tunnel.allowLocalNetwork && isPrivateNetworkRule(rule) {
+            return .direct
+        }
+        return .proxy
+    }
+
+    private static func isPrivateNetworkRule(_ rule: RouteRule) -> Bool {
+        guard rule.matcher == .ipCIDR else { return false }
+        let privatePrefixes = [
+            "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
+            "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
+            "192.168.", "fd", "fe80:"
+        ]
+        return rule.values.allSatisfy { value in
+            privatePrefixes.contains { value.lowercased().hasPrefix($0) }
+        }
     }
 }
