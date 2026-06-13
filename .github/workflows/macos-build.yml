@@ -39,3 +39,17 @@ jobs:
       - name: Fail when build failed
         if: steps.swift-build.outcome == 'failure'
         run: exit 1
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure protected mode has no default direct path
+        run: |
+          grep -q 'config.tunnel.killSwitch ? "proxy"' Sources/NV2ray/RuntimeConfigBuilder.swift
+          grep -q 'ruleSetDetour = config.tunnel.killSwitch ? "proxy" : "direct"' Sources/NV2ray/RuntimeConfigBuilder.swift
+          grep -q 'effectiveAction(for rule: RouteRule, config: AppConfiguration)' Sources/NV2ray/RuntimeConfigBuilder.swift
+          grep -q 'systemDNSWithKillSwitch' Sources/NV2ray/ConfigurationValidator.swift
+          grep -q 'directModeWithKillSwitch' Sources/NV2ray/ConfigurationValidator.swift
