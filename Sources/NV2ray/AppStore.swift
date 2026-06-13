@@ -68,8 +68,10 @@ final class AppStore: ObservableObject {
 
     func save() {
         do {
-            let data = try JSONEncoder.pretty.encode(configuration)
+            try saveSecretsToKeychain()
+            let data = try JSONEncoder.pretty.encode(redactedConfigurationForDisk())
             try data.write(to: configURL, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
         } catch {
             lastError = error.localizedDescription
         }
@@ -92,8 +94,33 @@ final class AppStore: ObservableObject {
 
     private func load() {
         guard let data = try? Data(contentsOf: configURL),
-              let value = try? JSONDecoder().decode(AppConfiguration.self, from: data) else { return }
+              var value = try? JSONDecoder().decode(AppConfiguration.self, from: data) else { return }
+        do {
+            try loadSecretsFromKeychain(into: &value)
+        } catch {
+            lastError = error.localizedDescription
+        }
         configuration = value
+    }
+
+    private func redactedConfigurationForDisk() -> AppConfiguration {
+        var redacted = configuration
+        redacted.profile.uuid = ""
+        redacted.profile.hysteriaPassword = ""
+        redacted.profile.obfsPassword = ""
+        return redacted
+    }
+
+    private func saveSecretsToKeychain() throws {
+        try KeychainStore.set(configuration.profile.uuid, for: "profile.uuid")
+        try KeychainStore.set(configuration.profile.hysteriaPassword, for: "profile.hysteriaPassword")
+        try KeychainStore.set(configuration.profile.obfsPassword, for: "profile.obfsPassword")
+    }
+
+    private func loadSecretsFromKeychain(into config: inout AppConfiguration) throws {
+        config.profile.uuid = try KeychainStore.get("profile.uuid")
+        config.profile.hysteriaPassword = try KeychainStore.get("profile.hysteriaPassword")
+        config.profile.obfsPassword = try KeychainStore.get("profile.obfsPassword")
     }
 }
 
