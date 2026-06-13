@@ -20,6 +20,10 @@ struct AdvancedView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
+                        Text("Protected mode requires an IP address in the proxy server field and an IP-based encrypted DNS endpoint, for example https://1.1.1.1/dns-query. Domain-based servers can create a DNS bootstrap loop and are blocked while this mode is enabled.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
                         Toggle("Allow access to the local network", isOn: $store.configuration.tunnel.allowLocalNetwork)
                             .disabled(!store.configuration.tunnel.killSwitch)
 
