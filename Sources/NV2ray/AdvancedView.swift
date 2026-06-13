@@ -4,6 +4,7 @@ import AppKit
 struct AdvancedView: View {
     @EnvironmentObject private var store: AppStore
     @Binding var generatedConfig: String
+    @State private var revealFullConfig = false
 
     var body: some View {
         ScrollView {
@@ -39,17 +40,32 @@ struct AdvancedView: View {
                     }
                 }
 
-                SettingsCard(title: "Generated sing-box configuration", subtitle: "Runtime configuration sent to the Packet Tunnel extension") {
+                SettingsCard(title: "Generated sing-box configuration", subtitle: "Preview is redacted by default to avoid leaking credentials") {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Button("Generate") { generatedConfig = store.exportGeneratedConfig() }
+                            Button("Generate Redacted") {
+                                revealFullConfig = false
+                                generatedConfig = store.exportGeneratedConfig(redacted: true)
+                            }
+                            Button("Reveal Full") {
+                                revealFullConfig = true
+                                generatedConfig = store.exportGeneratedConfig(redacted: false)
+                            }
                             Button("Copy") {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(generatedConfig, forType: .string)
                             }
+                            .disabled(generatedConfig.isEmpty)
                             Spacer()
                             Button("Save settings") { store.save() }
                         }
+
+                        if revealFullConfig {
+                            Label("Full runtime config contains credentials. Do not paste it into public logs or issue reports.", systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
                         TextEditor(text: $generatedConfig)
                             .font(.system(.caption, design: .monospaced))
                             .frame(minHeight: 280)
