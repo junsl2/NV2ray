@@ -44,7 +44,7 @@ final class AppStore: ObservableObject {
         save()
 
         do {
-            let config = try generatedConfigString()
+            let config = try generatedConfigString(redacted: false)
             try await tunnelManager.connect(
                 configContent: config,
                 tunnelSettings: configuration.tunnel
@@ -77,17 +77,21 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func exportGeneratedConfig() -> String {
+    func exportGeneratedConfig(redacted: Bool = true) -> String {
         do {
-            return try generatedConfigString()
+            return try generatedConfigString(redacted: redacted)
         } catch {
             return "{\"error\":\"\(error.localizedDescription)\"}"
         }
     }
 
-    private func generatedConfigString() throws -> String {
+    private func generatedConfigString(redacted: Bool) throws -> String {
         try ConfigurationValidator.validate(configuration)
-        let dictionary = try RuntimeConfigBuilder.build(configuration)
+        var dictionary = try RuntimeConfigBuilder.build(configuration)
+        dictionary = RuntimeConfigPostProcessor.apply(to: dictionary, using: configuration)
+        if redacted {
+            dictionary = RuntimeConfigRedactor.redact(dictionary)
+        }
         let data = try JSONSerialization.data(withJSONObject: dictionary, options: [.prettyPrinted, .sortedKeys])
         return String(decoding: data, as: UTF8.self)
     }
