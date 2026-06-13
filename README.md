@@ -17,6 +17,19 @@ The optional kill switch applies protection at both the macOS Network Extension 
 - Passes `includeAllNetworks` to the sing-box Apple extension
 - Changes the TUN stack from `system` to `gvisor`
 - Keeps local-network bypass disabled unless the user explicitly enables it
+- Removes default `direct` outbound while protected mode is active
+- Forces encrypted DNS, bootstrap DNS, and rule-set downloads through the proxy path
+- Converts user `direct` routing rules to `proxy`, except private LAN CIDR rules when local-network access is explicitly allowed
+
+Protected mode intentionally rejects unsafe combinations before connecting:
+
+- `System DNS`
+- `Direct` routing mode
+- Insecure TLS verification
+- Domain-based proxy server addresses
+- Domain-based encrypted DNS endpoints
+
+Use an IP address in the server field and an IP-based encrypted DNS endpoint such as `https://1.1.1.1/dns-query` when protected mode is enabled. Keep the SNI / server name field set for TLS verification.
 
 An intentional Stop action disables On Demand before stopping the tunnel, so normal network access is restored. Changes made while connected require a reconnect.
 
